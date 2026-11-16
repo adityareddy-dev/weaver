@@ -367,15 +367,11 @@ mod tests {
             };
 
             let exit_directive = run_command(&cli);
-            assert_eq!(exit_directive.exit_code, i32::from(dry_run));
+            assert_eq!(exit_directive.exit_code, 0);
             assert_eq!(
                 std::fs::read_to_string(&markdown_path).expect("read markdown"),
                 markdown
             );
-            if dry_run {
-                assert!(exit_directive.warnings.is_none());
-                continue;
-            }
             let warnings = exit_directive.warnings.expect("expected marker warnings");
             assert!(!warnings.has_error());
             let warnings = serde_json::to_value(warnings).expect("serializable warnings");

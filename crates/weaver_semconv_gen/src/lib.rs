@@ -125,7 +125,7 @@ pub trait MarkdownSnippetGenerator {
     /// file: The markdown file.
     /// dry_run: Whether to actually change the file or just report if changes would be made.
     /// attribute_registry_base_url: Legacy mechanism to pass parameters to the snippet templates.
-    /// Returns: marker warnings (fatal in dry-run), or an error if the update failed.
+    /// Returns: marker warnings, or an error if the update failed or dry-run found changes.
     fn update_markdown(
         &self,
         file: &str,
@@ -149,14 +149,15 @@ pub trait MarkdownSnippetGenerator {
                 return WResult::FatalErr(Error::compound(warnings));
             }
         } else if original_markdown != updated_markdown {
-            warnings.push(Error::MarkdownIsNotEqual {
+            let error = Error::MarkdownIsNotEqual {
                 original: original_markdown,
                 updated: updated_markdown,
+            };
+            return WResult::FatalErr(if warnings.is_empty() {
+                error
+            } else {
+                Error::compound(warnings.into_iter().chain([error]).collect())
             });
-            return WResult::FatalErr(Error::compound(warnings));
-        }
-        if dry_run && !warnings.is_empty() {
-            return WResult::FatalErr(Error::compound(warnings));
         }
         WResult::with_non_fatal_errors((), warnings)
     }
@@ -311,6 +312,50 @@ mod tests {
         ) -> Result<String, Error> {
             Ok("generated\n".to_owned())
         }
+    }
+
+    #[test]
+    fn dry_run_returns_markdown_mismatch_without_writing() -> Result<(), Error> {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("stale.md");
+        let original = "<!--semconv metric.test-->\nstale\n<!--endsemconv-->\n";
+        fs::write(&path, original).expect("write markdown");
+
+        match TestGenerator.update_markdown(path.to_str().expect("UTF-8 path"), true, None) {
+            WResult::FatalErr(Error::MarkdownIsNotEqual {
+                original: old,
+                updated,
+            }) => {
+                assert_eq!(old, original);
+                assert_eq!(
+                    updated,
+                    "<!--semconv metric.test-->\ngenerated\n<!--endsemconv-->\n"
+                );
+            }
+            _ => panic!("expected the markdown mismatch error directly"),
+        }
+        assert_eq!(fs::read_to_string(path).expect("read markdown"), original);
+        Ok(())
+    }
+
+    #[test]
+    fn marker_only_warnings_are_nonfatal_in_both_modes() -> Result<(), Error> {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("markers.md");
+        let markdown = "<!-- endweaverded -->\n";
+        fs::write(&path, markdown).expect("write markdown");
+
+        for dry_run in [true, false] {
+            let ((), warnings) = TestGenerator
+                .update_markdown(path.to_str().expect("UTF-8 path"), dry_run, None)
+                .into_result_with_non_fatal()?;
+            assert!(matches!(
+                warnings.as_slice(),
+                [Error::InvalidSnippetMarker { line: 1, .. }]
+            ));
+            assert_eq!(fs::read_to_string(&path).expect("read markdown"), markdown);
+        }
+        Ok(())
     }
 
     #[test]

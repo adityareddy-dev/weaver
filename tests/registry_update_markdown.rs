@@ -65,7 +65,7 @@ fn marker_only_file() {
     std::fs::write(&path, markdown).unwrap();
 
     for dry_run in [true, false] {
-        let diagnostics = update_markdown(dir.path(), dry_run, i32::from(dry_run));
+        let diagnostics = update_markdown(dir.path(), dry_run, 0);
         assert_marker_warning(&diagnostics, &path);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), markdown);
     }

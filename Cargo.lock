@@ -6732,6 +6732,7 @@ dependencies = [
  "nom 8.0.0",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "weaver_common",
  "weaver_diff",
